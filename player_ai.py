@@ -47,7 +47,7 @@ class PlayerAi:
                             return [d.x, d.y]
         return None
 
-    def __obstacle_in__path(self, info, jet: Jet):
+    def __obstacle_in_path(self, info, jet: Jet):
         h = int(self.recon_heading)
         pos = [0, 0]
         if h == 0:
@@ -139,41 +139,39 @@ class PlayerAi:
 
         self.recon_alive = self.__within_range([x, y], self.recon_position, 2)
 
-        print([x, y], self.recon_position)
-
         if not self.recon_alive:
             # Recon is "not alive", which means it has not reached the recon position
             jet.goto(*self.recon_position)
         else:
             target = self.__target_in_range(info, jet)
             # Check if it will hit a defensive obstacle
-            if self.__obstacle_in__path(info, jet):
+            if target:
+                # If there's a target in range, attack it, even as recon jet
+                jet.goto(*target)
+            elif self.__obstacle_in_path(info, jet):
                 h = int(self.recon_heading)
                 # If there's an obstacle ahead, turn 90 degrees to the right
                 jet.set_heading((h + 90) % 360)
                 self.recon_heading = (h + 90) % 360
                 # Move in the new direction
-                if h == 0:
+                if self.recon_heading == 0:
                     self.recon_position = [x + 1, y]
-                elif h == 90:
+                elif self.recon_heading == 90:
                     self.recon_position = [x, y + 1]
-                elif h == 180:
+                elif self.recon_heading == 180:
                     self.recon_position = [x - 1, y]
-                elif h == 270:
+                elif self.recon_heading == 270:
                     self.recon_position = [x, y - 1]
-
-            elif target:
-                # If there's a target in range, attack it, even as recon jet
-                jet.goto(*target)
             else:
+                print(self.next_recon_height, y, self.recon_heading, self.recon_position, x)
                 # Recon is alive, which means it is on recon duty
-                if self.__within_range([x, y], [0, y], 2):
+                if self.__within_range([x, y], [10, y], 2):
                     # if a horizontal line has been explored it will head upwards
-                    if x >= self.next_recon_height - 2:
-                        self.next_recon_height = x + 40
-                    jet.goto(self.next_recon_height, y)
+                    if y >= self.next_recon_height - 2:
+                        self.next_recon_height = y + 40
+                        self.recon_position = [x, self.next_recon_height]
+                    jet.goto(*self.recon_position)
                     self.recon_heading = 90
-                    self.recon_position = [x, y + 1]
                 else:
                     # else it will head right until at x == 0
                     jet.set_heading(0)
