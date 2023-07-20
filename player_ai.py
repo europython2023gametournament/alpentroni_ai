@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
+import math
 
 import numpy as np
 
@@ -16,6 +17,56 @@ class PlayerAi:
         # Record the number of tanks and ships I have at each base
         self.ntanks = {}
         self.nships = {}
+        self.recon = False
+
+    def __closest_point(self, points, reference_point):
+        distances = [math.sqrt((x2 - reference_point[0]) ** 2 + (y2 - reference_point[1]) ** 2) for x2, y2 in points]
+
+        closest = points[distances.index(min(distances))]
+
+        return closest
+    def __get_closest_base(self, info: dict, vehicle: dict):
+        vehicle_x = vehicle["x"]
+        vehicle_y = vehicle["y"]
+        bases = []
+        for name in info:
+            if name != self.team:
+
+                if "bases" in info[name]:
+                    for base in info[name]["bases"]:
+                        bases.append([base.x, base.y])
+        closest_base = self.__closest_point(bases, [vehicle_x, vehicle_y])
+        return closest_base
+
+    def __get_closest_ship(self, info: dict, vehicle: dict):
+        vehicle_x = vehicle["x"]
+        vehicle_y = vehicle["y"]
+        bases = []
+        for name in info:
+            if name != self.team:
+
+                if "bases" in info[name]:
+                    for base in info[name]["bases"]:
+                        bases.append([base.x, base.y])
+        closest_ship = self.__closest_point(bases, [vehicle_x, vehicle_y])
+        return closest_ship
+
+    def __get_closest_tank(self, info: dict, vehicle):
+        vehicle_x = vehicle["x"]
+        vehicle_y = vehicle["y"]
+        bases = []
+        for name in info:
+            if name != self.team:
+
+                if "bases" in info[name]:
+                    for base in info[name]["bases"]:
+                        bases.append([base.x, base.y])
+        closest_tank = self.__closest_point(bases, [vehicle_x, vehicle_y])
+        return closest_tank
+
+    def __get_recon_target(self, info: dict, jet: dict):
+
+        return []
 
     def run(self, t: float, dt: float, info: dict, game_map: np.ndarray):
         """
@@ -103,6 +154,8 @@ class PlayerAi:
                 self.nships[base.uid] += 1
             # If everything else is satisfied, build a jet
             elif base.crystal > base.cost("jet"):
+                if not self.recon:
+                    self.recon = True
                 # build_jet() returns the uid of the jet that was built
                 jet_uid = base.build_jet(heading=360 * np.random.random())
 
@@ -112,7 +165,7 @@ class PlayerAi:
         if len(info) > 1:
             for name in info:
                 if name != self.team:
-                    # Target only bases
+                    # Jets target bases and ships, tanks only bases
                     if "bases" in info[name]:
                         # Simply target the first base
                         t = info[name]["bases"][0]
@@ -194,7 +247,25 @@ class PlayerAi:
 
         # Iterate through all my jets
         if "jets" in myinfo:
+            recon_target = self.__get_recon_target(info, myinfo["jets"][0])
             for jet in myinfo["jets"]:
                 # Jets simply go to the target if there is one, they never get stuck
-                if target is not None:
-                    jet.goto(*target)
+                if recon_target:
+                    jet.goto(recon_target)
+                    recon_target = False
+                else:
+                    target_finders = [
+                        self.__get_closest_base,
+                        self.__get_closest_ship,
+                        self.__get_closest_tank,
+                        self.__get_recon_target,
+                    ]
+
+                    target = None
+                    for target_finder in target_finders:
+                        target = target_finder(info, jet)
+                        if target:
+                            break
+                jet.goto(*target)
+
+
