@@ -23,7 +23,6 @@ class PlayerAi:
     def __closest_point(self, points, reference_point):
         if points:
             distances = [math.sqrt((x2 - reference_point[0]) ** 2 + (y2 - reference_point[1]) ** 2) for x2, y2 in points]
-            print(distances)
             closest = points[distances.index(min(distances))]
             return closest
         else:
@@ -48,7 +47,6 @@ class PlayerAi:
         bases = []
         for name in info:
             if name != self.team:
-
                 if "bases" in info[name]:
                     for base in info[name]["bases"]:
                         bases.append([base.x, base.y])
@@ -132,41 +130,46 @@ class PlayerAi:
         # base.build_tank(): build a tank
         # base.build_ship(): build a ship
         # base.build_jet(): build a jet
-
+        tank_uids = []
+        if "tanks" in myinfo:
+            for tank in myinfo["tanks"]:
+                tank_uids.append(tank.uid)
+        ship_uids = []
+        if "ships" in myinfo:
+            for ship in myinfo["ships"]:
+                ship_uids.append(ship.uid)
         # Iterate through all my bases (vehicles belong to bases)
         for base in myinfo["bases"]:
             # If this is a new base, initialize the tank & ship counters
             if base.uid not in self.ntanks:
-                self.ntanks[base.uid] = 0
+                self.ntanks[base.uid] = []
             if base.uid not in self.nships:
-                self.nships[base.uid] = 0
+                self.nships[base.uid] = []
+            if "tanks" in myinfo:
+                self.ntanks[base.uid] = [item for item in self.ntanks[base.uid] if item in tank_uids]
+            if "ships" in myinfo:
+                self.nships[base.uid] = [item for item in self.nships[base.uid] if item in ship_uids]
             # create two tanks that stays at the base to protect it
-            if 3 > base.mines > 1 and self.ntanks[base.uid] < 2 and base.crystal > base.cost("tank"):
+            if 3 > base.mines > 1 and len(self.ntanks[base.uid]) < 2 and base.crystal > base.cost("tank"):
                 first_tank_uid = base.build_tank(heading=360 * np.random.random())
-                self.ntanks[base.uid] += 1
                 self.protector_tanks.append(first_tank_uid)
+                self.ntanks[base.uid].append(first_tank_uid)
             # Firstly, each base should build a mine if it has less than 3 mines
             elif base.mines < 3:
                 if base.crystal > base.cost("mine"):
                     base.build_mine()
             # Secondly, each base should build a tank if it has less than 5 tanks
-            elif base.crystal > base.cost("tank") and self.ntanks[base.uid] < 5:
+            elif base.crystal > base.cost("tank") and len(self.ntanks[base.uid]) < 5:
                 # build_tank() returns the uid of the tank that was built
                 tank_uid = base.build_tank(heading=360 * np.random.random())
                 # Add 1 to the tank counter for this base
-                self.ntanks[base.uid] += 1
+                self.ntanks[base.uid].append(tank_uid)
             # Thirdly, each base should build a ship if it has less than 3 ships
-            elif base.crystal > base.cost("ship") and self.nships[base.uid] < 3:
+            elif base.crystal > base.cost("ship") and len(self.nships[base.uid]) < 3:
                 # build_ship() returns the uid of the ship that was built
                 ship_uid = base.build_ship(heading=360 * np.random.random())
                 # Add 1 to the ship counter for this base
-                self.nships[base.uid] += 1
-            # If everything else is satisfied, build a jet
-            elif base.crystal > base.cost("jet"):
-                if not self.recon:
-                    self.recon = True
-                # build_jet() returns the uid of the jet that was built
-                jet_uid = base.build_jet(heading=360 * np.random.random())
+                self.nships[base.uid].append(ship_uid)
 
         # Try to find an enemy target
         target = None
