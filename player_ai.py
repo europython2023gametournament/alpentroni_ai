@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 # This is your team name
-CREATOR = "TeamName"
+CREATOR = "alpitroni"
 
 
 # This is the AI bot that will be instantiated for the competition
@@ -18,13 +18,17 @@ class PlayerAi:
         self.ntanks = {}
         self.nships = {}
         self.recon = False
+        self.protector_tanks = []
 
     def __closest_point(self, points, reference_point):
-        distances = [math.sqrt((x2 - reference_point[0]) ** 2 + (y2 - reference_point[1]) ** 2) for x2, y2 in points]
+        if points:
+            distances = [math.sqrt((x2 - reference_point[0]) ** 2 + (y2 - reference_point[1]) ** 2) for x2, y2 in points]
+            print(distances)
+            closest = points[distances.index(min(distances))]
+            return closest
+        else:
+            return False
 
-        closest = points[distances.index(min(distances))]
-
-        return closest
     def __get_closest_base(self, info: dict, vehicle: dict):
         vehicle_x = vehicle["x"]
         vehicle_y = vehicle["y"]
@@ -136,8 +140,13 @@ class PlayerAi:
                 self.ntanks[base.uid] = 0
             if base.uid not in self.nships:
                 self.nships[base.uid] = 0
+            # create two tanks that stays at the base to protect it
+            if 3 > base.mines > 1 and self.ntanks[base.uid] < 2 and base.crystal > base.cost("tank"):
+                first_tank_uid = base.build_tank(heading=360 * np.random.random())
+                self.ntanks[base.uid] += 1
+                self.protector_tanks.append(first_tank_uid)
             # Firstly, each base should build a mine if it has less than 3 mines
-            if base.mines < 3:
+            elif base.mines < 3:
                 if base.crystal > base.cost("mine"):
                     base.build_mine()
             # Secondly, each base should build a tank if it has less than 5 tanks
@@ -219,7 +228,10 @@ class PlayerAi:
         # Iterate through all my tanks
         if "tanks" in myinfo:
             for tank in myinfo["tanks"]:
-                if (tank.uid in self.previous_positions) and (not tank.stopped):
+                # stop all protector tanks so that they work as shield for the base
+                if tank.uid in self.protector_tanks:
+                    tank.stop()
+                elif (tank.uid in self.previous_positions) and (not tank.stopped):
                     # If the tank position is the same as the previous position,
                     # set a random heading
                     if all(tank.position == self.previous_positions[tank.uid]):
@@ -267,5 +279,3 @@ class PlayerAi:
                         if target:
                             break
                 jet.goto(*target)
-
-
