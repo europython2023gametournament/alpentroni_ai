@@ -140,7 +140,6 @@ class PlayerAi:
         # Get information about my team
         myinfo = info[self.team]
         self.__reset_moved()
-        print(self.previous_positions)
         tank_uids = []
         if "tanks" in myinfo:
             for tank in myinfo["tanks"]:
@@ -182,6 +181,9 @@ class PlayerAi:
                         counter += 1
 
             if len(myinfo["bases"]) > 2:
+                if base.crystal > base.cost("tank") and len(self.ntanks[base.uid]) < 2:
+                    tank_uid = base.build_tank(heading=360 * np.random.random())
+                    self.ntanks[base.uid].append(tank_uid)
                 if base.mines < 3:
                     if base.crystal > base.cost("mine"):
                         base.build_mine()
@@ -193,19 +195,13 @@ class PlayerAi:
                 elif base.crystal > base.cost("jet"):
                     jet_uid = base.build_jet(heading=360 * np.random.random())
             else:
-                if base.mines < 2:
+                if base.mines < 3:
                     if base.crystal > base.cost("mine"):
                         base.build_mine()
                 # Secondly, each base should build a tank if it has less than 5 tanks
                 elif base.crystal > base.cost("tank") and len(self.ntanks[base.uid]) < 5:
-                    print("Base UID: " + str(base.uid) + "Number of tanks: " + str(len(self.ntanks[base.uid])))
-                    # build_tank() returns the uid of the tank that was built
                     tank_uid = base.build_tank(heading=360 * np.random.random())
-                    # Add 1 to the tank counter for this base
                     self.ntanks[base.uid].append(tank_uid)
-                elif base.mines < 3:
-                    if base.crystal > base.cost("mine"):
-                        base.build_mine()
                 # Thirdly, each base should build a ship if it has less than 3 ships
                 elif base.crystal > base.cost("ship") and (len(self.nships[base.uid]) < 1 or len(myinfo["bases"]) < 2):
                     # build_ship() returns the uid of the ship that was built
@@ -234,14 +230,14 @@ class PlayerAi:
                         self.__move_tank(tank)
         if "ships" in myinfo:
             for ship in myinfo["ships"]:
-                if ship.uid in self.previous_positions and all(ship.position == self.previous_positions[ship.uid]):
+                if ship.uid in self.previous_positions and all(ship.position == self.previous_positions[ship.uid]["position"]):
                     not_near_base = not self.__ship_near_base(ship, myinfo.get('bases', [])) and not self.__check_bases(ship, info)
                     if ship.get_distance(ship.owner.x, ship.owner.y) > 40 and not_near_base:
                         ship.convert_to_base()
                     else:
                         ship.set_heading(np.random.random() * 360.0)
 
-                self.previous_positions[ship.uid] = ship.position
+                self.previous_positions[ship.uid] = {"position": ship.position, "moved": True}
 
                 defense = self.__defense_in_range(info, ship)
                 # Check if it will hit a defensive obstacle
