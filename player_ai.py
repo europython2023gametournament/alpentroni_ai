@@ -5,7 +5,7 @@ import numpy as np
 from supremacy.vehicles import Jet, Vehicle
 
 # This is your team name
-CREATOR = "alpitroni"
+CREATOR = "alpentroni"
 
 
 # This is the AI bot that will be instantiated for the competition
@@ -180,20 +180,22 @@ class PlayerAi:
                             self.previous_positions[tank.uid] = {"position": tank.position, "moved": True}
                         counter += 1
 
-            if len(myinfo["bases"]) > 2:
+            if len(myinfo["bases"]) > 1:
                 if base.crystal > base.cost("tank") and len(self.ntanks[base.uid]) < 2:
                     tank_uid = base.build_tank(heading=360 * np.random.random())
                     self.ntanks[base.uid].append(tank_uid)
                 if base.mines < 3:
                     if base.crystal > base.cost("mine"):
                         base.build_mine()
-                elif base.crystal > base.cost("ship") and len(self.nships[base.uid]) < 1:
-                    # build_ship() returns the uid of the ship that was built
-                    ship_uid = base.build_ship(heading=360 * np.random.random())
-                    # Add 1 to the ship counter for this base
-                    self.nships[base.uid].append(ship_uid)
                 elif base.crystal > base.cost("jet"):
                     jet_uid = base.build_jet(heading=360 * np.random.random())
+                elif base.crystal > base.cost("ship") and "ships" not in myinfo:
+                    ship_uid = base.build_ship(heading=360 * np.random.random())
+                    self.nships[base.uid].append(ship_uid)
+                elif base.crystal > base.cost("ship") and len(myinfo["ships"]) < 1:
+                    ship_uid = base.build_ship(heading=360 * np.random.random())
+                    self.nships[base.uid].append(ship_uid)
+
             else:
                 if base.mines < 3:
                     if base.crystal > base.cost("mine"):
@@ -203,7 +205,7 @@ class PlayerAi:
                     tank_uid = base.build_tank(heading=360 * np.random.random())
                     self.ntanks[base.uid].append(tank_uid)
                 # Thirdly, each base should build a ship if it has less than 3 ships
-                elif base.crystal > base.cost("ship") and (len(self.nships[base.uid]) < 1 or len(myinfo["bases"]) < 2):
+                elif base.crystal > base.cost("ship") and len(myinfo["bases"]) < 2:
                     # build_ship() returns the uid of the ship that was built
                     ship_uid = base.build_ship(heading=360 * np.random.random())
                     # Add 1 to the ship counter for this base
