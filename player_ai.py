@@ -165,18 +165,23 @@ class PlayerAi:
 
     def __move_tank(self, tank, target=None):
         if (tank.uid in self.previous_positions) and (not tank.stopped):
-            if all(tank.position == self.previous_positions[tank.uid]):
+            if all(tank.position == self.previous_positions[tank.uid]["position"]):
                 tank.set_heading(np.random.random() * 360.0)
             # Else, if there is a target, go to the target
             elif target is not None:
                 tank.goto(*target)
         # Store the previous position of this tank for the next time step
-        self.previous_positions[tank.uid] = tank.position
+        self.previous_positions[tank.uid] = {"position": tank.position, "moved": True}
+
+    def __reset_moved(self):
+        for key, value in self.previous_positions.items():
+            self.previous_positions[key]["moved"] = False
 
     def run(self, t: float, dt: float, info: dict, game_map: np.ndarray):
         # Get information about my team
         myinfo = info[self.team]
-
+        self.__reset_moved()
+        print(self.previous_positions)
         tank_uids = []
         if "tanks" in myinfo:
             for tank in myinfo["tanks"]:
@@ -185,11 +190,11 @@ class PlayerAi:
         if "ships" in myinfo:
             for ship in myinfo["ships"]:
                 ship_uids.append(ship.uid)
+
         # Iterate through all my bases (vehicles belong to bases)
         for base in myinfo["bases"]:
             # If this is a new base, initialize the tank & ship counters
             if base.uid not in self.ntanks:
-                print("test")
                 self.ntanks[base.uid] = []
             if base.uid not in self.nships:
                 self.nships[base.uid] = []
@@ -197,16 +202,14 @@ class PlayerAi:
                 self.ntanks[base.uid] = [item for item in self.ntanks[base.uid] if item in tank_uids]
                 counter = 0
                 for tank in myinfo["tanks"]:
-                    if not self.ntanks[base.uid]:
-                        self.__move_tank(tank)
-                    elif tank.uid in self.ntanks[base.uid]:
+                    if tank.uid in self.ntanks[base.uid]:
                         if counter > 3:
                             self.__move_tank(tank)
                         else:
                             if tank.uid in self.tank_target_positions:
                                 # check if target is reached or if tank didn't move at all
                                 if self.__within_range([tank.x, tank.y], self.tank_target_positions[tank.uid], 1) \
-                                        or all(tank.position == self.previous_positions[tank.uid]):
+                                        or all(tank.position == self.previous_positions[tank.uid]["position"]):
                                     target_x = base.x + np.random.randint(-10, 10)
                                     target_y = base.y + np.random.randint(-10, 10)
                                     self.tank_target_positions[tank.uid] = [target_x, target_y]
@@ -214,7 +217,9 @@ class PlayerAi:
                                 target_x = base.x + np.random.randint(-10, 10)
                                 target_y = base.y + np.random.randint(-10, 10)
                                 self.tank_target_positions[tank.uid] = [target_x, target_y]
-                            self.__move_tank(tank, self.tank_target_positions[tank.uid])
+                            tank.goto(self.tank_target_positions[tank.uid][0], self.tank_target_positions[tank.uid][1],
+                                      True)
+                            self.previous_positions[tank.uid] = {"position": tank.position, "moved": True}
                         counter += 1
 
             if len(myinfo["bases"]) > 2:
@@ -263,19 +268,24 @@ class PlayerAi:
                         t = info[name]["bases"][0]
                         target = [t.x, t.y]
 
+        if "tanks" in myinfo:
+            for tank in myinfo["tanks"]:
+                if tank.uid in self.previous_positions:
+                    if not self.previous_positions[tank.uid]["moved"]:
+                        self.__move_tank(tank)
         if "ships" in myinfo:
             for ship in myinfo["ships"]:
                 if ship.uid in self.previous_positions:
                     # If the ship position is the same as the previous position,
                     # convert the ship to a base if it is far from the owning base,
                     # set a random heading otherwise
-                    if all(ship.position == self.previous_positions[ship.uid]):
+                    if all(ship.position == self.previous_positions[ship.uid]["position"]):
                         if ship.get_distance(ship.owner.x, ship.owner.y) > 20:
                             ship.convert_to_base()
                         else:
                             ship.set_heading(np.random.random() * 360.0)
                 # Store the previous position of this ship for the next time step
-                self.previous_positions[ship.uid] = ship.position
+                self.previous_positions[ship.uid] = {"position": ship.position, "moved": False}
 
         # Iterate through all my jets
         if "jets" in myinfo:
