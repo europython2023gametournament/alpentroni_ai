@@ -119,7 +119,18 @@ class PlayerAi:
             if self.__is_heading_towards(defense, [jet.x, jet.x], jet['heading']):
                 # If there's an obstacle ahead, turn 140 degrees to the right
                 jet.set_heading(jet['heading'] + 140)
-
+        else:
+            # go to closest base, which is not the base of the team
+            bases = []
+            for team in info:
+                if team == self.team:
+                    continue
+                if "bases" in info[team]:
+                    for base in info[team]["bases"]:
+                        bases.append([base.x, base.y])
+            closest_base = self.__closest_point(bases, [jet.x, jet.y])
+            if closest_base:
+                jet.goto(*closest_base)
         # Continue on path
 
     def __move_tank(self, tank, target=None):
