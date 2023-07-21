@@ -38,28 +38,28 @@ class PlayerAi:
         distance = np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
         return distance <= r
 
+    def __is_heading_towards(self, pt1, pt2, direction):
+        dx = pt2[0] - pt1[0]
+        dy = pt2[1] - pt1[1]
+
+        angle = (np.arctan2(dy, dx) * (180 / np.pi) - 90) % 360
+
+        return abs(direction - angle) <= 180
+
     def __target_in_range(self, info, jet):
         for name in info:
             if name != self.team:
+                target = []
                 if "bases" in info[name]:
-                    target = info[name]["bases"]
-                    for d in target:
-                        if self.__within_range([jet.x, jet.y], [d.x, d.y], 20):
-                            return [d.x, d.y]
+                    target += info[name]["bases"]
+                if "ships" in info[name]:
+                    target += info[name]["ships"]
+                for t in target:
+                    if self.__within_range([jet.x, jet.y], [t.x, t.y], 20):
+                        return [t.x, t.y]
         return None
 
-    def __obstacle_in_path(self, info, jet: Jet):
-        h = int(self.recon_heading)
-        pos = [0, 0]
-        if h == 0:
-            pos = [jet.x + 3, jet.y]
-        elif h == 90:
-            pos = [jet.x, jet.y + 3]
-        elif h == 180:
-            pos = [jet.x - 3, jet.y]
-        elif h == 270:
-            pos = [jet.x, jet.y - 3]
-
+    def __defense_in_range(self, info, jet):
         for name in info:
             if name != self.team:
                 defense = []
@@ -67,16 +67,41 @@ class PlayerAi:
                     defense += info[name]["tanks"]
                 if "jets" in info[name]:
                     defense += info[name]["jets"]
-                if "ships" in info[name]:
-                    defense += info[name]["ships"]
-
                 for d in defense:
-                    if self.__within_range(pos, [d.x, d.y], 6):
-                        return True
-        return False
+                    if self.__within_range([jet.x, jet.y], [d.x, d.y], 20):
+                        return [d.x, d.y]
+        return None
 
 
-    def __get_closest_base(self, info: dict, vehicle: Vehicle):
+    # def __obstacle_in_path(self, info, jet: Jet):
+    #     h = int(self.recon_heading)
+    #     pos = [0, 0]
+    #     if h == 0:
+    #         pos = [jet.x + 3, jet.y]
+    #     elif h == 90:
+    #         pos = [jet.x, jet.y + 3]
+    #     elif h == 180:
+    #         pos = [jet.x - 3, jet.y]
+    #     elif h == 270:
+    #         pos = [jet.x, jet.y - 3]
+    #
+    #     for name in info:
+    #         if name != self.team:
+    #             defense = []
+    #             if "tanks" in info[name]:
+    #                 defense += info[name]["tanks"]
+    #             if "jets" in info[name]:
+    #                 defense += info[name]["jets"]
+    #             if "ships" in info[name]:
+    #                 defense += info[name]["ships"]
+    #
+    #             for d in defense:
+    #                 if self.__within_range(pos, [d.x, d.y], 6):
+    #                     return True
+    #     return False
+
+
+    def __get_closest_base(self, info: dict, vehicle):
         vehicle_x = vehicle["x"]
         vehicle_y = vehicle["y"]
         bases = []
@@ -92,29 +117,16 @@ class PlayerAi:
     def __get_closest_ship(self, info: dict, vehicle: Vehicle):
         vehicle_x = vehicle["x"]
         vehicle_y = vehicle["y"]
-        bases = []
+        ships = []
         for name in info:
             if name != self.team:
-                if "bases" in info[name]:
-                    for base in info[name]["bases"]:
-                        bases.append([base.x, base.y])
-        closest_ship = self.__closest_point(bases, [vehicle_x, vehicle_y])
+                if "ships" in info[name]:
+                    for ship in info[name]["ships"]:
+                        ships.append([ship.x, ship.y])
+        closest_ship = self.__closest_point(ships, [vehicle_x, vehicle_y])
         return closest_ship
 
-    def __get_closest_tank(self, info: dict, vehicle: Vehicle):
-        vehicle_x = vehicle["x"]
-        vehicle_y = vehicle["y"]
-        bases = []
-        for name in info:
-            if name != self.team:
-
-                if "bases" in info[name]:
-                    for base in info[name]["bases"]:
-                        bases.append([base.x, base.y])
-        closest_tank = self.__closest_point(bases, [vehicle_x, vehicle_y])
-        return closest_tank
-
-    def __control_recon_jet(self, info: dict, jet: Jet, game_map: np.ndarray):
+    def __control_jet(self, info: dict, jet, game_map: np.ndarray):
         x = int(jet.x)
         y = int(jet.y)
         """
@@ -138,46 +150,18 @@ class PlayerAi:
         :return:
         """
 
-        self.recon_alive = self.__within_range([x, y], self.recon_position, 2)
+        target = self.__target_in_range(info, jet)
+        defense = self.__defense_in_range(info, jet)
+        # Check if it will hit a defensive obstacle
+        if target:
+            # If there's a target in range, attack it, even as recon jet
+            jet.goto(*target)
+        elif defense:
+            if self.__is_heading_towards(defense, [jet.x, jet.x], jet['heading']):
+                # If there's an obstacle ahead, turn 140 degrees to the right
+                jet.set_heading(jet['heading'] + 140)
 
-        if not self.recon_alive:
-            # Recon is "not alive", which means it has not reached the recon position
-            jet.goto(*self.recon_position)
-        else:
-            target = self.__target_in_range(info, jet)
-            # Check if it will hit a defensive obstacle
-            if target:
-                # If there's a target in range, attack it, even as recon jet
-                jet.goto(*target)
-            elif self.__obstacle_in_path(info, jet):
-                h = int(self.recon_heading)
-                # If there's an obstacle ahead, turn 90 degrees to the right
-                jet.set_heading((h + 90) % 360)
-                self.recon_heading = (h + 90) % 360
-                # Move in the new direction
-                if self.recon_heading == 0:
-                    self.recon_position = [x + 1, y]
-                elif self.recon_heading == 90:
-                    self.recon_position = [x, y + 1]
-                elif self.recon_heading == 180:
-                    self.recon_position = [x - 1, y]
-                elif self.recon_heading == 270:
-                    self.recon_position = [x, y - 1]
-            else:
-                print(self.next_recon_height, y, self.recon_heading, self.recon_position, x)
-                # Recon is alive, which means it is on recon duty
-                if self.__within_range([x, y], [10, y], 2):
-                    # if a horizontal line has been explored it will head upwards
-                    if y >= self.next_recon_height - 2:
-                        self.next_recon_height = y + 40
-                        self.recon_position = [x, self.next_recon_height]
-                    jet.goto(*self.recon_position)
-                    self.recon_heading = 90
-                else:
-                    # else it will head right until at x == 0
-                    jet.set_heading(0)
-                    self.recon_heading = 0
-                    self.recon_position = [x + 1, y]
+        # Continue on path
 
     def run(self, t: float, dt: float, info: dict, game_map: np.ndarray):
         # Get information about my team
@@ -313,20 +297,19 @@ class PlayerAi:
 
         # Iterate through all my jets
         if "jets" in myinfo:
-            self.__control_recon_jet(info, myinfo["jets"][0], game_map)
-            # Go through all jets except recon jet [0]
-            for jet in myinfo["jets"][1:]:
+            for jet in myinfo["jets"]:
                 # Jets simply go to the target if there is one, they never get stuck
-                target_finders = [
-                    self.__get_closest_base,
-                    self.__get_closest_ship,
-                    self.__get_closest_tank
-                ]
 
-                target = None
-                for target_finder in target_finders:
-                    target = target_finder(info, jet)
-                    if target:
-                        break
-                if target:
-                    jet.goto(*target)
+                self.__control_jet(info, jet, game_map)
+                # target_finders = [
+                #     self.__get_closest_base,
+                #     self.__get_closest_ship
+                # ]
+                #
+                # target = None
+                # for target_finder in target_finders:
+                #     target = target_finder(info, jet)
+                #     if target:
+                #         break
+                # if target:
+                #     jet.goto(*target)
