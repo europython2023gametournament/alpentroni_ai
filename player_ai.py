@@ -59,7 +59,7 @@ class PlayerAi:
                         return [t.x, t.y]
         return None
 
-    def __defense_in_range(self, info, jet):
+    def __defense_in_range(self, info, mine):
         for name in info:
             if name != self.team:
                 defense = []
@@ -68,63 +68,22 @@ class PlayerAi:
                 if "jets" in info[name]:
                     defense += info[name]["jets"]
                 for d in defense:
-                    if self.__within_range([jet.x, jet.y], [d.x, d.y], 20):
+                    if self.__within_range([mine.x, mine.y], [d.x, d.y], 20):
                         return [d.x, d.y]
         return None
 
+    def __ship_near_base(self, ship, bases):
+        for base in bases:
+            if ship.get_distance(base.x, base.y) < 40:
+                return True
+        return False
 
-    # def __obstacle_in_path(self, info, jet: Jet):
-    #     h = int(self.recon_heading)
-    #     pos = [0, 0]
-    #     if h == 0:
-    #         pos = [jet.x + 3, jet.y]
-    #     elif h == 90:
-    #         pos = [jet.x, jet.y + 3]
-    #     elif h == 180:
-    #         pos = [jet.x - 3, jet.y]
-    #     elif h == 270:
-    #         pos = [jet.x, jet.y - 3]
-    #
-    #     for name in info:
-    #         if name != self.team:
-    #             defense = []
-    #             if "tanks" in info[name]:
-    #                 defense += info[name]["tanks"]
-    #             if "jets" in info[name]:
-    #                 defense += info[name]["jets"]
-    #             if "ships" in info[name]:
-    #                 defense += info[name]["ships"]
-    #
-    #             for d in defense:
-    #                 if self.__within_range(pos, [d.x, d.y], 6):
-    #                     return True
-    #     return False
-
-
-    def __get_closest_base(self, info: dict, vehicle):
-        vehicle_x = vehicle["x"]
-        vehicle_y = vehicle["y"]
-        bases = []
-        for name in info:
-            if name != self.team:
-
-                if "bases" in info[name]:
-                    for base in info[name]["bases"]:
-                        bases.append([base.x, base.y])
-        closest_base = self.__closest_point(bases, [vehicle_x, vehicle_y])
-        return closest_base
-
-    def __get_closest_ship(self, info: dict, vehicle: Vehicle):
-        vehicle_x = vehicle["x"]
-        vehicle_y = vehicle["y"]
-        ships = []
-        for name in info:
-            if name != self.team:
-                if "ships" in info[name]:
-                    for ship in info[name]["ships"]:
-                        ships.append([ship.x, ship.y])
-        closest_ship = self.__closest_point(ships, [vehicle_x, vehicle_y])
-        return closest_ship
+    def __check_bases(self, ship, info):
+        for team in info:
+            if "bases" in info[team]:
+                if self.__ship_near_base(ship, info[team]["bases"]):
+                    return True
+        return False
 
     def __control_jet(self, info: dict, jet, game_map: np.ndarray):
         x = int(jet.x)
@@ -275,33 +234,23 @@ class PlayerAi:
                         self.__move_tank(tank)
         if "ships" in myinfo:
             for ship in myinfo["ships"]:
-                if ship.uid in self.previous_positions:
-                    # If the ship position is the same as the previous position,
-                    # convert the ship to a base if it is far from the owning base,
-                    # set a random heading otherwise
-                    if all(ship.position == self.previous_positions[ship.uid]["position"]):
-                        if ship.get_distance(ship.owner.x, ship.owner.y) > 20:
-                            ship.convert_to_base()
-                        else:
-                            ship.set_heading(np.random.random() * 360.0)
-                # Store the previous position of this ship for the next time step
-                self.previous_positions[ship.uid] = {"position": ship.position, "moved": False}
+                if ship.uid in self.previous_positions and all(ship.position == self.previous_positions[ship.uid]):
+                    not_near_base = not self.__ship_near_base(ship, myinfo.get('bases', [])) and not self.__check_bases(ship, info)
+                    if ship.get_distance(ship.owner.x, ship.owner.y) > 40 and not_near_base:
+                        ship.convert_to_base()
+                    else:
+                        ship.set_heading(np.random.random() * 360.0)
+
+                self.previous_positions[ship.uid] = ship.position
+
+                defense = self.__defense_in_range(info, ship)
+                # Check if it will hit a defensive obstacle
+                if defense:
+                    if self.__is_heading_towards(defense, [ship.x, ship.x], ship['heading']):
+                        # If there's an obstacle ahead, turn 140 degrees to the right
+                        ship.set_heading(ship['heading'] + 140)
 
         # Iterate through all my jets
         if "jets" in myinfo:
             for jet in myinfo["jets"]:
-                # Jets simply go to the target if there is one, they never get stuck
-
                 self.__control_jet(info, jet, game_map)
-                # target_finders = [
-                #     self.__get_closest_base,
-                #     self.__get_closest_ship
-                # ]
-                #
-                # target = None
-                # for target_finder in target_finders:
-                #     target = target_finder(info, jet)
-                #     if target:
-                #         break
-                # if target:
-                #     jet.goto(*target)
